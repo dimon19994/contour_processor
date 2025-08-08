@@ -11,19 +11,15 @@ sys.path.append(os.path.abspath("../plots_storage"))
 from plots import display_plot
 
 PLOTS_TO_DISPLAY = {
-    "import_image": True,
-    "blur_image": True,
-    "get_mask": True,
-    "extract_contours": True,
-    "replace_extra": True,
+    "import_image": False,
+    "blur_image": False,
+    "get_mask": False,
+    "replace_extra": False,
     "invert_mask": True,
 }
 
 
 def display_decorator(func):
-    if not PLOTS_TO_DISPLAY.get(func.__name__, False):
-        return func
-
     @wraps(func)
     def wrapper(*args, **kwargs):
         file_name = kwargs.get("file_name")
@@ -32,6 +28,9 @@ def display_decorator(func):
         except TypeError:
             kwargs.pop("file_name")
             result = func(*args, **kwargs)
+
+        if not PLOTS_TO_DISPLAY.get(func.__name__, False):
+            return result
 
         display_result = deepcopy(result)
         if len(display_result.shape) == 2:
@@ -83,8 +82,8 @@ def get_mask(image, white=False):
 
         mask = cv2.inRange(hsv, lower_bound, upper_bound)
     else:
-        # lower_bound = np.array([0, 0, 235])
-        lower_bound = np.array([0, 0, 255])
+        lower_bound = np.array([0, 0, 235])
+        # lower_bound = np.array([0, 0, 255])
         upper_bound = np.array([179, 50, 255])
 
         mask = cv2.inRange(hsv, lower_bound, upper_bound)
@@ -115,7 +114,7 @@ def invert_mask(mask):
     return 255 - mask
 
 
-def display_contours(img, contours, file_name, pre=False):
+def display_contours(img, contours, file_name):
     for ind, c in enumerate(contours):
         if c.shape[0] > 1000:
             contur_reverse = np.array([[x, img.shape[0] - y] for [x, y] in c[:, 0, :]]).T
@@ -133,10 +132,9 @@ def display_contours(img, contours, file_name, pre=False):
             )
 
 
-# for number in range(1, 2):
-for number in range(2, 3):
-    # file_name = f"all_good_{number}"
-    file_name = f"inside_out_{number}"
+for number in range(1, 6):
+    file_name = f"all_good_{number}"
+    # file_name = f"inside_out_{number}"
 
     input_img = import_image(file_name=file_name)
     blur_img = blur_image(img=input_img, kernel=3, file_name=file_name)
@@ -151,3 +149,4 @@ for number in range(2, 3):
 
     contours = extract_contours(inverted_mask)
     display_contours(cutted_img, contours, file_name)
+

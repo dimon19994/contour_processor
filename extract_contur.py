@@ -1,22 +1,14 @@
 import sys
 import os
+import argparse
 from copy import deepcopy
 from functools import wraps
-from io import BytesIO
 
 import cv2
 import numpy as np
 
 sys.path.append(os.path.abspath("../plots_storage"))
 from plots import display_plot
-
-PLOTS_TO_DISPLAY = {
-    "import_image": False,
-    "blur_image": False,
-    "get_mask": False,
-    "replace_extra": False,
-    "invert_mask": True,
-}
 
 
 def display_decorator(func):
@@ -131,22 +123,48 @@ def display_contours(img, contours, file_name):
                 background_image = f"/Users/dmyrto_koltsov/PycharmProjects/process_conturs/input_data/{file_name}.jpg",
             )
 
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-t", '--template', help="File name template", required=True, type=str)
+    parser.add_argument("-w", "--is_white", help="Background colour white", action="store_true", default=False)
+    parser.add_argument("-i", "--import_image", help="Display import image", action="store_true", default=False)
+    parser.add_argument("-b", "--blur_image", help="Display blur image", action="store_true", default=False)
+    parser.add_argument("-m", "--mask", help="Display mask", action="store_true", default=False)
+    parser.add_argument("-e", "--replace_extra", help="Display replace extra", action="store_true", default=False)
+    parser.add_argument("-im", "--invert_mask", help="Display invert mask", action="store_true", default=False)
+    parser.add_argument("-c", "--res_contour", help="Display res contour", action="store_true", default=False)
+    parser.add_argument("-n", '--numbers', help="Display colour", type=str, nargs="+")
 
-for number in range(1, 6):
-    file_name = f"all_good_{number}"
-    # file_name = f"inside_out_{number}"
+    argv, unknown_argv = parser.parse_known_args()
 
-    input_img = import_image(file_name=file_name)
-    blur_img = blur_image(img=input_img, kernel=3, file_name=file_name)
+    PLOTS_TO_DISPLAY = {
+        "import_image": argv.import_image,
+        "blur_image":  argv.blur_image,
+        "get_mask": argv.mask,
+        "replace_extra": argv.replace_extra,
+        "invert_mask": argv.invert_mask,
+    }
 
-    mask = get_mask(blur_img, white=True, file_name=file_name)
+    if "all" in argv.numbers:
+        numbers = range(1, int(argv.numbers[1]) + 1)
+    else:
+        numbers = argv.numbers
 
-    contours = extract_contours(mask)
+    for number in numbers:
+        file_name = argv.template.format(number)
 
-    cutted_img = replace_extra(contours, mask, file_name=file_name)
+        input_img = import_image(file_name=file_name)
+        blur_img = blur_image(img=input_img, kernel=3, file_name=file_name)
 
-    inverted_mask = invert_mask(cutted_img, file_name=file_name)
+        mask = get_mask(blur_img, white=argv.is_white, file_name=file_name)
 
-    contours = extract_contours(inverted_mask)
-    display_contours(cutted_img, contours, file_name)
+        contours = extract_contours(mask)
+
+        cutted_img = replace_extra(contours, mask, file_name=file_name)
+
+        inverted_mask = invert_mask(cutted_img, file_name=file_name)
+
+        contours = extract_contours(inverted_mask)
+        if argv.res_contour:
+            display_contours(cutted_img, contours, file_name)
 

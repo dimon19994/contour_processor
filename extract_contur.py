@@ -1,16 +1,21 @@
+import sys
+import os
 from copy import deepcopy
 from functools import wraps
+from io import BytesIO
 
 import cv2
 import numpy as np
 
+sys.path.append(os.path.abspath("../plots_storage"))
+from plots import display_plot
 
 PLOTS_TO_DISPLAY = {
     "import_image": True,
     "blur_image": True,
     "get_mask": True,
     "extract_contours": True,
-    "remove_extra": True,
+    "replace_extra": True,
     "invert_mask": True,
 }
 
@@ -79,7 +84,7 @@ def get_mask(image, white=False):
         mask = cv2.inRange(hsv, lower_bound, upper_bound)
     else:
         # lower_bound = np.array([0, 0, 235])
-        lower_bound = np.array([0, 0, 254])
+        lower_bound = np.array([0, 0, 255])
         upper_bound = np.array([179, 50, 255])
 
         mask = cv2.inRange(hsv, lower_bound, upper_bound)
@@ -97,23 +102,12 @@ def extract_contours(mask):
 
 
 @display_decorator
-def remove_extra(contours, img):
-    x, y, w, h = cv2.boundingRect(contours[0])
+def replace_extra(contours, mask):
+    contour_mask = np.zeros_like(mask)
+    cv2.drawContours(contour_mask, contours, 0, 255, thickness=cv2.FILLED)
+    output = np.where(contour_mask == 0, 255, mask)
 
-    if w * h < 500:
-        return img
-
-    # TODO  fux this number
-    shrink = 300
-
-    x_new = x + shrink
-    y_new = y + shrink
-    w_new = max(1, w - 2 * shrink)
-    h_new = max(1, h - 2 * shrink)
-
-    cropped = img[y_new : y_new + h_new, x_new : x_new + w_new]
-
-    return cropped
+    return output
 
 
 @display_decorator
@@ -121,14 +115,26 @@ def invert_mask(mask):
     return 255 - mask
 
 
-def display_contours(img, contours):
-    contur_reverse = np.array([[x, img.shape[0] - y] for [x, y] in contours[:, 0, :]])
+def display_contours(img, contours, file_name, pre=False):
+    for ind, c in enumerate(contours):
+        if c.shape[0] > 1000:
+            contur_reverse = np.array([[x, img.shape[0] - y] for [x, y] in c[:, 0, :]]).T
 
-    # TODO  Add displaying
+            data = [contur_reverse, "lines", "Сontours", "#2325b8", {"line": {"width": 1}}, True]
+
+            display_plot(
+                [data],
+                filename = f"{file_name}_{ind + 1}_contours",
+                save_path = "/Users/dmyrto_koltsov/PycharmProjects/process_conturs/plots/",
+                img = True,
+                title = "contours",
+                equal = True,
+                background_image = f"/Users/dmyrto_koltsov/PycharmProjects/process_conturs/input_data/{file_name}.jpg",
+            )
 
 
 # for number in range(1, 2):
-for number in range(5, 6):
+for number in range(2, 3):
     # file_name = f"all_good_{number}"
     file_name = f"inside_out_{number}"
 
@@ -138,9 +144,10 @@ for number in range(5, 6):
     mask = get_mask(blur_img, white=True, file_name=file_name)
 
     contours = extract_contours(mask)
-    cutted_img = remove_extra(contours, mask, file_name=file_name)
+
+    cutted_img = replace_extra(contours, mask, file_name=file_name)
 
     inverted_mask = invert_mask(cutted_img, file_name=file_name)
-    contours = extract_contours(inverted_mask)
 
-    display_contours(input_img, contours)
+    contours = extract_contours(inverted_mask)
+    display_contours(cutted_img, contours, file_name)

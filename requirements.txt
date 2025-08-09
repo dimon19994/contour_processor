@@ -2,3 +2,4 @@ opencv-python
 numpy
 plotly
 pillow
+git+https://github.com/dimon19994/plots_lib.git@main

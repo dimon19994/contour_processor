@@ -1,14 +1,10 @@
-import sys
-import os
 import argparse
 from copy import deepcopy
 from functools import wraps
 
 import cv2
 import numpy as np
-
-sys.path.append(os.path.abspath("../plots_storage"))
-from plots import display_plot
+from plots_lib import display_plot
 
 
 def display_decorator(func):
@@ -48,7 +44,7 @@ def blur_image(img, kernel):
 
 
 @display_decorator
-def get_mask(image, white=False):
+def get_mask(image, white=False, threshold=255):
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
     if not white:
@@ -74,8 +70,7 @@ def get_mask(image, white=False):
 
         mask = cv2.inRange(hsv, lower_bound, upper_bound)
     else:
-        lower_bound = np.array([0, 0, 235])
-        # lower_bound = np.array([0, 0, 255])
+        lower_bound = np.array([0, 0, threshold])
         upper_bound = np.array([179, 50, 255])
 
         mask = cv2.inRange(hsv, lower_bound, upper_bound)
@@ -109,37 +104,109 @@ def invert_mask(mask):
 def display_contours(img, contours, file_name):
     for ind, c in enumerate(contours):
         if c.shape[0] > 1000:
-            contur_reverse = np.array([[x, img.shape[0] - y] for [x, y] in c[:, 0, :]]).T
+            contur_reverse = np.array(
+                [[x, img.shape[0] - y] for [x, y] in c[:, 0, :]]
+            ).T
 
-            data = [contur_reverse, "lines", "Сontours", "#2325b8", {"line": {"width": 1}}, True]
+            data = [
+                contur_reverse,
+                "lines",
+                "Сontours",
+                "#2325b8",
+                {"line": {"width": 1}},
+                True,
+            ]
 
             display_plot(
                 [data],
-                filename = f"{file_name}_{ind + 1}_contours",
-                save_path = "/Users/dmyrto_koltsov/PycharmProjects/process_conturs/plots/",
-                img = True,
-                title = "contours",
-                equal = True,
-                background_image = f"/Users/dmyrto_koltsov/PycharmProjects/process_conturs/input_data/{file_name}.jpg",
+                filename=f"{file_name}_{ind + 1}_contours",
+                save_path="/Users/dmyrto_koltsov/PycharmProjects/process_conturs/plots/",
+                img=True,
+                title="contours",
+                equal=True,
+                background_image=f"/Users/dmyrto_koltsov/PycharmProjects/process_conturs/input_data/{file_name}.jpg",
             )
+
+
+def save_contours(contours, file_name):
+    for ind, c in enumerate(contours):
+        if c.shape[0] > 1000:
+            transformed_contur = np.array([[x, y] for [x, y] in c[:, 0, :]])
+            np.savetxt(
+                f"./res_data/{file_name}_{ind}.txt", transformed_contur, fmt="%d"
+            )
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-t", '--template', help="File name template", required=True, type=str)
-    parser.add_argument("-w", "--is_white", help="Background colour white", action="store_true", default=False)
-    parser.add_argument("-i", "--import_image", help="Display import image", action="store_true", default=False)
-    parser.add_argument("-b", "--blur_image", help="Display blur image", action="store_true", default=False)
-    parser.add_argument("-m", "--mask", help="Display mask", action="store_true", default=False)
-    parser.add_argument("-e", "--replace_extra", help="Display replace extra", action="store_true", default=False)
-    parser.add_argument("-im", "--invert_mask", help="Display invert mask", action="store_true", default=False)
-    parser.add_argument("-c", "--res_contour", help="Display res contour", action="store_true", default=False)
-    parser.add_argument("-n", '--numbers', help="Display colour", type=str, nargs="+")
+    parser.add_argument(
+        "-t", "--template", help="File name template", required=True, type=str
+    )
+    parser.add_argument(
+        "-w",
+        "--is_white",
+        help="Background colour white",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "-wt", "--white_threshold", help="Background colour white threshold", type=int
+    )
+    parser.add_argument(
+        "-i",
+        "--import_image",
+        help="Display import image",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "-b",
+        "--blur_image",
+        help="Display blur image",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "-m", "--mask", help="Display mask", action="store_true", default=False
+    )
+    parser.add_argument(
+        "-e",
+        "--replace_extra",
+        help="Display replace extra",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "-im",
+        "--invert_mask",
+        help="Display invert mask",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "-dc",
+        "--display_contour",
+        help="Display res contour",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "-sc",
+        "--save_contour",
+        help="Save res contour",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument("-n", "--numbers", help="Display colour", type=str, nargs="+")
 
     argv, unknown_argv = parser.parse_known_args()
 
+    if argv.is_white and argv.white_threshold is None:
+        parser.error("--white_threshold/-wt is required when --is_white/-w is set")
+
     PLOTS_TO_DISPLAY = {
         "import_image": argv.import_image,
-        "blur_image":  argv.blur_image,
+        "blur_image": argv.blur_image,
         "get_mask": argv.mask,
         "replace_extra": argv.replace_extra,
         "invert_mask": argv.invert_mask,
@@ -156,7 +223,12 @@ if __name__ == "__main__":
         input_img = import_image(file_name=file_name)
         blur_img = blur_image(img=input_img, kernel=3, file_name=file_name)
 
-        mask = get_mask(blur_img, white=argv.is_white, file_name=file_name)
+        mask = get_mask(
+            blur_img,
+            white=argv.is_white,
+            threshold=argv.white_threshold,
+            file_name=file_name,
+        )
 
         contours = extract_contours(mask)
 
@@ -165,6 +237,9 @@ if __name__ == "__main__":
         inverted_mask = invert_mask(cutted_img, file_name=file_name)
 
         contours = extract_contours(inverted_mask)
-        if argv.res_contour:
-            display_contours(cutted_img, contours, file_name)
 
+        if argv.save_contour:
+            save_contours(contours, file_name)
+
+        if argv.display_contour:
+            display_contours(cutted_img, contours, file_name)

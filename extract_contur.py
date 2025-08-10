@@ -120,11 +120,11 @@ def display_contours(img, contours, file_name):
             display_plot(
                 [data],
                 filename=f"{file_name}_{ind + 1}_contours",
-                save_path="/Users/dmyrto_koltsov/PycharmProjects/process_conturs/plots/",
+                save_path="./plots/",
                 img=True,
                 title="contours",
                 equal=True,
-                background_image=f"/Users/dmyrto_koltsov/PycharmProjects/process_conturs/input_data/{file_name}.jpg",
+                background_image=f"./input_data/{file_name}.jpg",
             )
 
 

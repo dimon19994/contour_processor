@@ -1,4 +1,5 @@
 import argparse
+import os.path
 from copy import deepcopy
 from functools import wraps
 
@@ -6,25 +7,23 @@ import cv2
 import numpy as np
 from plots_lib import display_plot
 
+from config import *
+
 
 def display_decorator(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
-        file_name = kwargs.get("file_name")
-        try:
-            result = func(*args, **kwargs)
-        except TypeError:
-            kwargs.pop("file_name")
-            result = func(*args, **kwargs)
+        result = func(*args, **kwargs)
 
-        if not PLOTS_TO_DISPLAY.get(func.__name__, False):
-            return result
+        if PLOTS_TO_DISPLAY.get(func.__name__, False):
+            save_path = os.path.join(MATERIALS_PATH, f"processed_contour/{file_name.rsplit("_", 1)[0]}/plots/{side}")
+            os.makedirs(save_path, exist_ok=True)
 
-        display_result = deepcopy(result)
-        if len(display_result.shape) == 2:
-            display_result = cv2.cvtColor(display_result, cv2.COLOR_GRAY2BGR)
+            display_result = deepcopy(result)
+            if len(display_result.shape) == 2:
+                display_result = cv2.cvtColor(display_result, cv2.COLOR_GRAY2BGR)
 
-        cv2.imwrite(f"./plots/{file_name}_{func.__name__}.jpg", display_result)
+            cv2.imwrite(os.path.join(save_path, f"{func.__name__}.jpg"), display_result)
 
         return result
 
@@ -33,7 +32,13 @@ def display_decorator(func):
 
 @display_decorator
 def import_image(file_name):
-    img = cv2.imread(f"./input_data/{file_name}.jpg")
+    img = cv2.imread(
+        os.path.join(
+            MATERIALS_PATH,
+            f"input_data/{file_name.rsplit("_", 1)[0]}",
+            f"{file_name}.jpg"
+        )
+    )
     return img
 
 
@@ -101,15 +106,16 @@ def invert_mask(mask):
     return 255 - mask
 
 
-def display_contours(img, contours, file_name):
+def display_contours(img, contours, file_name, side):
+    save_path = os.path.join(MATERIALS_PATH, f"processed_contour/{file_name.rsplit("_", 1)[0]}/plots/{side}")
+    bg_path = os.path.join(MATERIALS_PATH, f"input_data/{file_name.rsplit("_", 1)[0]}", f"{file_name}.jpg")
+
     for ind, c in enumerate(contours):
         if c.shape[0] > 1000:
-            contur_reverse = np.array(
-                [[x, img.shape[0] - y] for [x, y] in c[:, 0, :]]
-            ).T
+            transformed_contur = process_contur(c, img).T
 
             data = [
-                contur_reverse,
+                transformed_contur,
                 "lines",
                 "Сontours",
                 "#2325b8",
@@ -119,22 +125,44 @@ def display_contours(img, contours, file_name):
 
             display_plot(
                 [data],
-                filename=f"{file_name}_{ind + 1}_contours",
-                save_path="./plots/",
-                img=True,
+                filename=f"contour_{ind + 1}",
+                save_path=save_path,
+                s_json=True,
                 title="contours",
                 equal=True,
-                background_image=f"./input_data/{file_name}.jpg",
+                background_image=bg_path,
             )
 
 
-def save_contours(contours, file_name):
+def save_contours(contours, number, img):
+    save_path = os.path.join(MATERIALS_PATH, f"processed_contour/{file_name.rsplit("_", 1)[0]}/res_data")
+    os.makedirs(save_path, exist_ok=True)
+
     for ind, c in enumerate(contours):
         if c.shape[0] > 1000:
-            transformed_contur = np.array([[x, y] for [x, y] in c[:, 0, :]])
+            transformed_contur = process_contur(c, img)
             np.savetxt(
-                f"./res_data/{file_name}_{ind}.txt", transformed_contur, fmt="%d"
+                os.path.join(save_path, f"contour_{number}.txt"),
+                transformed_contur,
+                fmt="%d",
             )
+            number += 1
+
+    return number
+
+
+def delete_same_points(contur):
+    _, idx = np.unique(contur, axis=0, return_index=True)
+    unique_points = contur[np.sort(idx)]
+
+    return unique_points
+
+
+def process_contur(contour, img):
+    contur_reverse = np.array([[x, img.shape[0] - y] for [x, y] in contour[:, 0, :]])
+    unique_contur = delete_same_points(contur_reverse)
+
+    return unique_contur
 
 
 if __name__ == "__main__":
@@ -217,29 +245,31 @@ if __name__ == "__main__":
     else:
         numbers = argv.numbers
 
+    general_number = 1
+
     for number in numbers:
         file_name = argv.template.format(number)
+        side = f"side_{number}"
 
         input_img = import_image(file_name=file_name)
-        blur_img = blur_image(img=input_img, kernel=3, file_name=file_name)
+        blur_img = blur_image(img=input_img, kernel=3)
 
         mask = get_mask(
             blur_img,
             white=argv.is_white,
             threshold=argv.white_threshold,
-            file_name=file_name,
         )
 
         contours = extract_contours(mask)
 
-        cutted_img = replace_extra(contours, mask, file_name=file_name)
+        cutted_img = replace_extra(contours, mask)
 
-        inverted_mask = invert_mask(cutted_img, file_name=file_name)
+        inverted_mask = invert_mask(cutted_img)
 
         contours = extract_contours(inverted_mask)
 
         if argv.save_contour:
-            save_contours(contours, file_name)
+            general_number = save_contours(contours, general_number, input_img)
 
         if argv.display_contour:
-            display_contours(cutted_img, contours, file_name)
+            display_contours(cutted_img, contours, file_name, side)
